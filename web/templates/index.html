@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Base Trading Agent</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+<body>
+  <!-- ── Header ─────────────────────────────────────────────────────── -->
+  <header>
+    <div class="logo">
+      <span class="logo-icon">⬡</span>
+      <span>Base Trading Agent</span>
+    </div>
+    <div class="header-right">
+      <span id="network-badge" class="badge badge-testnet">Testnet</span>
+      <span id="mode-badge" class="badge badge-dry">Dry Run</span>
+      <div id="status-dot" class="status-dot stopped"></div>
+      <span id="status-label">Stopped</span>
+    </div>
+  </header>
+
+  <main>
+    <!-- ── Left column: controls + stats ──────────────────────────── -->
+    <aside class="sidebar">
+
+      <!-- Config card -->
+      <section class="card" id="config-card">
+        <h2>Configuration</h2>
+
+        <label>Network
+          <select id="cfg-network">
+            <option value="testnet">Base Sepolia (Testnet)</option>
+            <option value="mainnet">Base Mainnet</option>
+          </select>
+        </label>
+
+        <label>Mode
+          <select id="cfg-mode">
+            <option value="dry">Dry Run (simulate)</option>
+            <option value="live">Live Trading</option>
+          </select>
+        </label>
+
+        <label>Token
+          <select id="cfg-token">
+            <option value="USDC">USDC</option>
+            <option value="DAI">DAI</option>
+            <option value="CBETH">cbETH</option>
+          </select>
+        </label>
+
+        <label>Strategy
+          <select id="cfg-strategy">
+            <option value="combined">Combined (SMA + RSI)</option>
+            <option value="sma">SMA Crossover</option>
+            <option value="rsi">RSI</option>
+          </select>
+        </label>
+
+        <label>Trade Amount (ETH)
+          <input type="number" id="cfg-amount" value="0.01" step="0.001" min="0.001" />
+        </label>
+
+        <label>Polling Interval (s)
+          <input type="number" id="cfg-interval" value="60" step="10" min="10" />
+        </label>
+
+        <label>Max Slippage (%)
+          <input type="number" id="cfg-slippage" value="0.5" step="0.1" min="0.1" max="5" />
+        </label>
+
+        <div class="btn-row">
+          <button id="btn-start" class="btn btn-green" onclick="startAgent()">▶ Start</button>
+          <button id="btn-stop"  class="btn btn-red"   onclick="stopAgent()" disabled>■ Stop</button>
+        </div>
+
+        <p id="error-msg" class="error-msg hidden"></p>
+      </section>
+
+      <!-- Stats card -->
+      <section class="card">
+        <h2>Live Stats</h2>
+        <div class="stats-grid">
+          <div class="stat">
+            <span class="stat-label">ETH Balance</span>
+            <span class="stat-value" id="stat-eth">—</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label" id="stat-token-label">USDC Balance</span>
+            <span class="stat-value" id="stat-token">—</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Current Price</span>
+            <span class="stat-value" id="stat-price">—</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Entry Price</span>
+            <span class="stat-value" id="stat-entry">—</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Position (ETH)</span>
+            <span class="stat-value" id="stat-position">—</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">PnL</span>
+            <span class="stat-value" id="stat-pnl">—</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">SMA Short</span>
+            <span class="stat-value" id="stat-sma-short">—</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">SMA Long</span>
+            <span class="stat-value" id="stat-sma-long">—</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">RSI</span>
+            <span class="stat-value" id="stat-rsi">—</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Trades</span>
+            <span class="stat-value" id="stat-trades">0</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Signal card -->
+      <section class="card">
+        <h2>Last Signal</h2>
+        <div id="signal-box" class="signal-box hold">HOLD</div>
+        <div class="confidence-bar-wrap">
+          <div id="confidence-bar" class="confidence-bar" style="width:0%"></div>
+        </div>
+        <p id="signal-reason" class="signal-reason">Waiting for data…</p>
+      </section>
+    </aside>
+
+    <!-- ── Right column: chart + tables ───────────────────────────── -->
+    <div class="content">
+
+      <!-- Price chart -->
+      <section class="card chart-card">
+        <h2>Price Chart <span id="chart-pair" class="muted">WETH / USDC</span></h2>
+        <canvas id="price-chart"></canvas>
+      </section>
+
+      <!-- Trade log -->
+      <section class="card">
+        <h2>Trade Log</h2>
+        <div class="table-wrap">
+          <table id="trade-table">
+            <thead>
+              <tr><th>Time</th><th>Action</th><th>Price</th><th>Amount (ETH)</th></tr>
+            </thead>
+            <tbody id="trade-tbody"></tbody>
+          </table>
+          <p id="no-trades" class="muted center">No trades yet.</p>
+        </div>
+      </section>
+
+      <!-- Log console -->
+      <section class="card log-card">
+        <h2>Agent Log <button class="btn btn-sm" onclick="clearLog()">Clear</button></h2>
+        <div id="log-console"></div>
+      </section>
+    </div>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

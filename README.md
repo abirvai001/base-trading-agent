@@ -25,7 +25,25 @@ agent/
 main.py            # CLI entry point
 ```
 
-## Quick Start
+## Web Dashboard
+
+The agent ships with a real-time web dashboard built with Flask + Socket.IO.
+
+```bash
+pip install -r requirements.txt
+cp .env.example .env   # set PRIVATE_KEY
+python run_web.py
+# Open http://localhost:5000
+```
+
+The dashboard lets you:
+- Configure network, strategy, token, and trade size
+- Start / stop the agent with one click
+- Watch the live price chart with SMA overlays
+- Monitor signals, PnL, balances, and trade history
+- Stream agent logs in real time
+
+## Quick Start (CLI)
 
 ### 1. Clone & install
 
